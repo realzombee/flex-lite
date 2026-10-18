@@ -51,10 +51,35 @@ export interface ScrobbleSync {
 	updated_at: Generated<number | null>;
 }
 
+export interface DownloadQueues {
+	id: Generated<number>;
+	client_identifier: string; // X-Plex-Client-Identifier
+	account_id: number | null; // Plex User ID
+	status: 'deciding' | 'waiting' | 'processing' | 'done' | 'error';
+	created_at: Generated<number | null>;
+	updated_at: Generated<number | null>;
+}
+
+export interface DownloadQueueItems {
+	id: Generated<number>;
+	queue_id: number;
+	key: string;               // e.g. /library/metadata/628b0... or flex:episode:...
+	guid: string;              // Normalized Plex Discover / Stremio GUID
+	status: 'deciding' | 'waiting' | 'processing' | 'available' | 'done' | 'error';
+	target_quality: string | null; // e.g. 1080p, 720p, original
+	stream_url: string | null; // Resolved Debrid stream URL
+	error_message: string | null;
+	created_at: Generated<number | null>;
+	updated_at: Generated<number | null>;
+}
+
 export interface DB {
 	item_mappings: ItemMappings;
 	play_queues: PlayQueues;
 	progress: Progress;
 	metadata: DB_Metadata;
 	scrobble_sync: ScrobbleSync;
+	download_queues: DownloadQueues;
+	download_queue_items: DownloadQueueItems;
 }
+

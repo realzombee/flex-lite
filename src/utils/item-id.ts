@@ -5,7 +5,8 @@ export const isLocalId = (id: string) => /^\d{1,15}$/.test(id);
 
 //Item ids a request refers to: the /library/metadata/<ids> path, or the key/path/uri params of item routes.
 export function extractItemIds(path: string, query: Record<string, any> = {}): string[] {
-	const values = [path, query.key, query.path, query.uri].filter((value): value is string => typeof value === 'string');
+	const rawKeys = Array.isArray(query.keys) ? query.keys : [query.keys];
+	const values = [path, query.key, query.path, query.uri, ...rawKeys].filter((value): value is string => typeof value === 'string');
 
 	return values
 		.flatMap((value) => {

@@ -6,6 +6,7 @@ import { createProxyMiddleware, fixRequestBody, responseInterceptor } from 'http
 import { FormatInterceptor } from './format.interceptor.js';
 import { SectionsService } from './plex/sections.service.js';
 import { PlayQueuesService } from './play-queues/play-queues.service.js';
+import { DownloadQueueService } from './download-queue/download-queue.service.js';
 import { shouldProxy } from './utils/proxy-filter.js';
 dotenv.config();
 
@@ -35,12 +36,14 @@ async function bootstrap() {
 
 	const sections = app.get(SectionsService);
 	const playQueues = app.get(PlayQueuesService);
+	const downloadQueues = app.get(DownloadQueueService);
 
 	const pathFilter = function (path: string, req: any) {
 		return shouldProxy(path, req.query, {
 			proxyEnabled: PROXY.enabled,
 			sections,
 			playQueueMissing: req.flexPlayQueueMissing === true,
+			downloadQueueMissing: req.flexDownloadQueueMissing === true,
 		});
 	};
 
@@ -57,13 +60,26 @@ async function bootstrap() {
 		next();
 	});
 
-	// Before routing: keep the virtual sections fresh, and flag play queues Flex does not hold so they go to Plex
+	// Before routing: keep the virtual sections fresh, and flag play queues and download queues Flex does not hold so they go to Plex
 	app.use(async (req: any, res: any, next: any) => {
 		try {
 			if (PROXY.enabled) {
 				await sections.refreshIfStale();
 				const playQueueId = /^\/playQueues\/(\d+)/.exec(req.path)?.[1];
 				req.flexPlayQueueMissing = !!playQueueId && !(await playQueues.getPlayQueue(Number(playQueueId)));
+
+				const downloadQueueMatch = /^\/downloadQueue\/(\d+)(?:\/item[s]?\/(\d+))?/.exec(req.path);
+				if (downloadQueueMatch) {
+					const queueId = Number(downloadQueueMatch[1]);
+					const itemId = downloadQueueMatch[2] ? Number(downloadQueueMatch[2]) : undefined;
+					//A queue Flex does not hold belongs to Plex; a missing item inside a held queue belongs to Plex as well
+					const queueMissing = !(await downloadQueues.getQueueById(queueId));
+					if (queueMissing) {
+						req.flexDownloadQueueMissing = true;
+					} else if (itemId !== undefined) {
+						req.flexDownloadQueueMissing = !(await downloadQueues.getItemById(itemId));
+					}
+				}
 			}
 		} catch (error: any) {
 			console.error(`Could not prepare request routing: ${error?.message ?? error}`);

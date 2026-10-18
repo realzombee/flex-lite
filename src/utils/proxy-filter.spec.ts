@@ -62,4 +62,24 @@ describe('shouldProxy', () => {
 		expect(shouldProxy('/playQueues/777', {}, { ...flex, playQueueMissing: true })).toBe(true);
 		expect(shouldProxy('/playQueues/777', {}, { ...flex, playQueueMissing: false })).toBe(false);
 	});
+
+	it('handles downloadQueue routes when Flex manages them', () => {
+		expect(shouldProxy('/downloadQueue', {}, flex)).toBe(false);
+		expect(shouldProxy('/downloadQueue/1/items', {}, flex)).toBe(false);
+		expect(shouldProxy('/downloadQueue/1/item/2/decision', {}, flex)).toBe(false);
+		expect(shouldProxy('/downloadQueue/1/item/2/media', {}, flex)).toBe(false);
+	});
+
+	it('proxies downloadQueue when downloadQueueMissing is true', () => {
+		expect(shouldProxy('/downloadQueue/1/items', {}, { ...flex, downloadQueueMissing: true })).toBe(true);
+		expect(shouldProxy('/downloadQueue/1/item/2/decision', {}, { ...flex, downloadQueueMissing: true })).toBe(true);
+	});
+
+	it('proxies downloadQueue add if keys only refer to local Plex items', () => {
+		expect(shouldProxy('/downloadQueue/1/add', { keys: '/library/metadata/12345' }, flex)).toBe(true);
+		expect(shouldProxy('/downloadQueue/1/add', { keys: ['/library/metadata/12345', '/library/metadata/67890'] }, flex)).toBe(true);
+		expect(shouldProxy('/downloadQueue/1/add', { keys: '/library/metadata/68ec89c449b9526d4b7250a3' }, flex)).toBe(false);
+		expect(shouldProxy('/downloadQueue/1/add', { keys: ['/library/metadata/12345', '/library/metadata/68ec89c449b9526d4b7250a3'] }, flex)).toBe(false);
+	});
 });
+

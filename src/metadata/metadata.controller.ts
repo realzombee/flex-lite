@@ -268,7 +268,7 @@ export class MetadataController {
 			MediaContainer: new MediaContainer({
 				identifier: 'com.plexapp.plugins.library',
 				...this.sections.containerOf([metadata]),
-				allowSync: false,
+				allowSync: true,
 				Metadata: [metadata],
 			})
 		}
@@ -291,7 +291,7 @@ export class MetadataController {
 			MediaContainer: new MediaContainer({
 				identifier: 'com.plexapp.plugins.library',
 				...this.sections.containerOf(page),
-				allowSync: false,
+				allowSync: true,
 				totalSize: items.length,
 				offset,
 				[isXML ? 'Video' : 'Metadata']: page,

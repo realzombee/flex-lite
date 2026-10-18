@@ -5,6 +5,7 @@ export type ProxyState = {
 	proxyEnabled: boolean;
 	sections: Pick<SectionsService, 'enabled' | 'isVirtual'>;
 	playQueueMissing?: boolean; //Play queue is not held by Flex, so it belongs to Plex
+	downloadQueueMissing?: boolean; //Download queue or item is not held by Flex, so it belongs to Plex
 };
 
 //Routes Flex serves once it has a Plex token, matched by prefix. Everything not listed here is proxied straight to Plex.
@@ -20,6 +21,7 @@ const FLEX_ROUTES = [
 	'/playQueues',
 	'/dummy.mkv',
 	'/actions/removeFromContinueWatching',
+	'/downloadQueue',
 ];
 
 //Flex serves only these exact paths. Anything beneath them (eg. /media/providers/metadata) is Plex's.
@@ -44,6 +46,7 @@ export function shouldProxy(path: string, query: Record<string, any>, state: Pro
 	if (path.startsWith('/library/search')) return !state.sections.enabled;
 	if (path.startsWith('/hubs')) return !(state.sections.enabled && FLEX_HUB_ROUTE.test(path));
 	if (state.playQueueMissing && /^\/playQueues\/\d+/.test(path)) return true;
+	if (state.downloadQueueMissing && /^\/downloadQueue\/\d+/.test(path)) return true;
 	if (FLEX_EXACT_ROUTES.includes(path)) return false;
 
 	return !FLEX_ROUTES.some((route) => path.startsWith(route));

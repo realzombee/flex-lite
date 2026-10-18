@@ -7,6 +7,7 @@ import { LoggerMiddleware } from './middleware/logger.middleware.js';
 import { ProvidersModule } from './providers/providers.module.js';
 import { MetadataModule } from './metadata/metadata.module.js';
 import { PlayQueuesModule } from './play-queues/play-queues.module.js';
+import { DownloadQueueModule } from './download-queue/download-queue.module.js';
 import { PlexModule } from './plex/plex.module.js';
 import { StremioModule } from './stremio/stremio.module.js';
 import { XPlexMiddleware } from './middleware/x-plex.middleware.js';
@@ -27,6 +28,7 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
     ProvidersModule,
     MetadataModule,
     PlayQueuesModule,
+    DownloadQueueModule,
     PlexModule,
     StremioModule,
     ScheduleModule.forRoot(),

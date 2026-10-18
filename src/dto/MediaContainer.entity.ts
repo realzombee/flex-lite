@@ -5,9 +5,22 @@ import { MediaProvider } from './provider/MediaProvider.entity.js';
 
 @Expose()
 export class MediaContainer {
+	DownloadQueue?: any[];
+	DownloadQueueItem?: any[];
+	AddedQueueItems?: any[];
+
 	@Expose()
 	get size(): number {
-		return this.Hub?.length || this.Metadata?.length || this.MediaProvider?.length || this.UserState?.length || 0;
+		return (
+			this.DownloadQueue?.length ||
+			this.DownloadQueueItem?.length ||
+			this.AddedQueueItems?.length ||
+			this.Hub?.length ||
+			this.Metadata?.length ||
+			this.MediaProvider?.length ||
+			this.UserState?.length ||
+			0
+		);
 	}
 
 	totalSize: number;
