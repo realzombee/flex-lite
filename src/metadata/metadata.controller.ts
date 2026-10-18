@@ -356,7 +356,8 @@ export class MetadataController {
 				(clientType === ClientType.ROKU && headers['x-plex-playback-session-id']) ||
 				(clientType === ClientType.WEB && headers['x-plex-playback-id']) ||
 				(clientType === ClientType.BIGSCREEN && headers['x-plex-playback-id']) ||
-				(clientType === ClientType.NATIVE_ANDROID && query.checkFiles == '1' && query.asyncAugmentMetadata !== '1')
+				(clientType === ClientType.NATIVE_ANDROID && query.checkFiles == '1' && query.asyncAugmentMetadata !== '1') ||
+				(clientType === ClientType.REACT_NATIVE && query.checkFiles == '1')
 			) && (metadata.type === 'episode' || metadata.type === 'movie')
 		) {
 			const itemPath = await this.appService.resolveMedia(metadata);
