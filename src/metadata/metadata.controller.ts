@@ -368,6 +368,14 @@ export class MetadataController {
 
 		this.metadataService.applyDummyMedia(metadata, clientType)
 
+    // Mark the media as exists and accessible to enable downloads
+		for (const media of metadata.Media ?? []) {
+			for (const part of media.Part ?? []) {
+				part.exists = true;
+				part.accessible = true;
+			}
+		}
+
 		return {
 			MediaContainer: new MediaContainer({
 				identifier: 'com.plexapp.plugins.library',
