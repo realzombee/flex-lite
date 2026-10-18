@@ -5,12 +5,14 @@ import {
 	Get,
 	Headers,
 	HttpCode,
+	Logger,
 	NotFoundException,
 	Param,
 	Post,
 	Query,
 	Req,
 	Res,
+	ServiceUnavailableException,
 	UseGuards,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
@@ -254,6 +256,7 @@ export class DownloadQueueController {
 		@Req() req: Request,
 		@Res() res: Response,
 	) {
+		const logger = new Logger(DownloadQueueController.name);
 		const queueId = Number.parseInt(queueIdStr, 10);
 		const itemId = Number.parseInt(itemIdStr, 10);
 		if (Number.isNaN(queueId) || Number.isNaN(itemId)) throw new BadRequestException('Invalid queueId or itemId');
@@ -264,21 +267,69 @@ export class DownloadQueueController {
 		}
 
 		if (!item.stream_url) {
-			throw new NotFoundException('Media stream not resolved');
+			//Per the Plex spec the media endpoint answers 503 + Retry-After while the item is not ready yet
+			const stillResolving = item.status === 'deciding' || item.status === 'waiting' || item.status === 'processing';
+			res.set('Retry-After', stillResolving ? '5' : '-1');
+			throw new ServiceUnavailableException('Media stream not resolved');
 		}
 
+		const isHead = req.method === 'HEAD';
 		const rangeHeader = req.headers.range;
-		const ifRangeHeader = req.headers['if-range'];
 
 		try {
 			const upstreamHeaders: Record<string, string> = {};
-			if (rangeHeader) upstreamHeaders['range'] = rangeHeader;
-			if (ifRangeHeader && typeof ifRangeHeader === 'string') upstreamHeaders['if-range'] = ifRangeHeader;
+			if (isHead && !rangeHeader) {
+				//Answer HEAD from a 1-byte ranged fetch instead of downloading the whole file
+				upstreamHeaders['range'] = 'bytes=0-0';
+			} else {
+				if (rangeHeader) upstreamHeaders['range'] = rangeHeader;
+				const ifRangeHeader = req.headers['if-range'];
+				if (ifRangeHeader && typeof ifRangeHeader === 'string') upstreamHeaders['if-range'] = ifRangeHeader;
+			}
 
 			const response = await ofetch.raw(item.stream_url, {
 				headers: upstreamHeaders,
 				responseType: 'stream',
+				ignoreResponseError: true,
+				timeout: 30000,
 			});
+
+			if (!response.ok) {
+				//Upstream answered with an error status; relay it instead of masking it as 502
+				logger.error(
+					`Upstream media request for item ${itemId} failed: status ${response.status} url=${item.stream_url}`,
+				);
+				res.status(response.status >= 400 ? response.status : 502);
+				res.json({ error: 'Upstream media request failed', status: response.status });
+				return;
+			}
+
+			const contentType = response.headers.get('content-type');
+			const contentDisposition = response.headers.get('content-disposition');
+			const lastModified = response.headers.get('last-modified');
+
+			if (isHead) {
+				const contentRange = response.headers.get('content-range');
+
+				//Report the full resource size: total from Content-Range (bytes 0-0/1234) or straight Content-Length
+				let contentLength: string | null = null;
+				if (contentRange) {
+					const total = Number.parseInt(contentRange.split('/')[1] ?? '', 10);
+					if (Number.isFinite(total)) contentLength = String(total);
+				}
+				contentLength ??= response.headers.get('content-length');
+
+				res.status(200);
+				if (contentType) res.header('Content-Type', contentType);
+				if (contentLength) res.header('Content-Length', contentLength);
+				if (contentDisposition) res.header('Content-Disposition', contentDisposition);
+				if (lastModified) res.header('Last-Modified', lastModified);
+				res.header('Accept-Ranges', 'bytes');
+				res.end();
+
+				(response._data as ReadableStream | null)?.cancel?.().catch(() => {});
+				return;
+			}
 
 			res.status(response.status);
 
@@ -287,19 +338,31 @@ export class DownloadQueueController {
 
 			res.header('Accept-Ranges', 'bytes');
 
-			const contentType = response.headers.get('content-type');
 			if (contentType) res.header('Content-Type', contentType);
 
 			const contentLength = response.headers.get('content-length');
 			if (contentLength) res.header('Content-Length', contentLength);
 
-			const contentDisposition = response.headers.get('content-disposition');
 			if (contentDisposition) res.header('Content-Disposition', contentDisposition);
+			if (lastModified) res.header('Last-Modified', lastModified);
 
 			const nodeStream = Readable.fromWeb(response._data as any);
+			nodeStream.on('error', (pipeError: unknown) => {
+				logger.error(`Upstream stream for item ${itemId} failed mid-transfer: ${pipeError}`);
+				if (!res.headersSent) {
+					res.status(502);
+				}
+				if (!res.writableEnded) {
+					res.end();
+				}
+				nodeStream.destroy();
+			});
 			req.on('close', () => nodeStream.destroy());
 			nodeStream.pipe(res);
 		} catch (error: any) {
+			logger.error(
+				`Upstream media request for item ${itemId} threw: ${error?.name ?? 'Error'} ${error?.statusCode ?? ''} ${error?.message ?? error}`,
+			);
 			if (!res.headersSent) {
 				res.status(502).json({ error: 'Upstream stream request failed', details: error?.message });
 			}
