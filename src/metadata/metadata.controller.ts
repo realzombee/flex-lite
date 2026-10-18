@@ -377,6 +377,69 @@ export class MetadataController {
 		}
 	}
 
+	//Subscription modes: the download flow asks the source server for this before it lets the user start a
+	//download. Real Plex answers with the item itself followed by its parent chain (episode -> season -> show)
+	@Get('/library/metadata/:id/subscription/modes')
+	async subscriptionModes(@Param() params: { id: string }, @IsXML() isXML: boolean) {
+		//Local ids belong to Plex, and Plex serves their subscription modes itself
+		if (isLocalId(params.id)) throw new NotFoundException();
+
+		const item = await this.metadataService.getItem(params.id);
+		if (!item) throw new NotFoundException();
+
+		const parentId = item.parentRatingKey && !isLocalId(item.parentRatingKey) ? item.parentRatingKey : undefined;
+		const grandparentId = item.grandparentRatingKey && !isLocalId(item.grandparentRatingKey) ? item.grandparentRatingKey : undefined;
+
+		let parent: Metadata | undefined;
+		let grandparent: Metadata | undefined;
+		if (item.type === 'episode') {
+			[parent, grandparent] = await Promise.all([
+				parentId ? this.metadataService.getItem(parentId) : undefined,
+				grandparentId ? this.metadataService.getItem(grandparentId) : undefined,
+			]).then(([p, g]) => [p ?? undefined, g ?? undefined]);
+		} else if (item.type === 'season') {
+			parent = parentId ? (await this.metadataService.getItem(parentId)) ?? undefined : undefined;
+		}
+
+		//Attributes real Plex puts on each entry of the chain
+		const fields = [
+			'guid', 'index', 'parentGuid', 'parentIndex', 'parentThumb', 'parentTitle', 'parentYear',
+			'ratingKey', 'thumb', 'title', 'type', 'year', 'originallyAvailableAt',
+			'grandparentGuid', 'grandparentThumb', 'grandparentTitle', 'grandparentYear',
+		];
+
+		const projected = (entry: Metadata) => {
+			const values = Object.fromEntries(fields.filter((field) => (entry as any)[field] !== undefined).map((field) => [field, (entry as any)[field]]));
+			const projection = new Metadata(values);
+			projection.userState = undefined; //The real modes response carries no user state
+			return this.sections.stamp(projection);
+		};
+
+		const asVideo = (entry: Metadata) => ['movie', 'episode', 'clip'].includes(entry.type ?? '');
+		const videoEntries: Metadata[] = [];
+		const directoryEntries: Metadata[] = [];
+		for (const entry of [item, ...([parent, grandparent].filter(Boolean) as Metadata[])]) {
+			(asVideo(entry) ? videoEntries : directoryEntries).push(projected(entry));
+		}
+
+		return {
+			MediaContainer: new MediaContainer({
+				identifier: 'com.plexapp.plugins.library',
+				mediaTagPrefix: '/system/bundle/media/flags/',
+				mediaTagVersion: 1732215884,
+				...this.sections.containerOf([...videoEntries, ...directoryEntries]),
+				type: item.type,
+				//Videos are Video elements and parents are Directories in Plex's XML; JSON merges everything under Metadata
+				...(isXML
+					? {
+							...(videoEntries.length ? { Video: videoEntries } : {}),
+							...(directoryEntries.length ? { Directory: directoryEntries } : {}),
+						}
+					: { Metadata: [...videoEntries, ...directoryEntries] }),
+			} as any),
+		};
+	}
+
 	//Gets child elements of library item. eg. seasons/episodes. Proxy to plex discover
 	@Get(['/library/metadata/:id/children', '/library/metadata/:id/grandchildren'])
 	async metadataChildren(

@@ -8,6 +8,8 @@ export class MediaContainer {
 	DownloadQueue?: any[];
 	DownloadQueueItem?: any[];
 	AddedQueueItems?: any[];
+	Video?: any[];
+	Directory?: any[];
 
 	@Expose()
 	get size(): number {
@@ -15,6 +17,8 @@ export class MediaContainer {
 			this.DownloadQueue?.length ||
 			this.DownloadQueueItem?.length ||
 			this.AddedQueueItems?.length ||
+			//Video entries and Directory parents are emitted together by flattened containers (eg. subscription modes)
+			(this.Video?.length ?? 0) + (this.Directory?.length ?? 0) ||
 			this.Hub?.length ||
 			this.Metadata?.length ||
 			this.MediaProvider?.length ||
